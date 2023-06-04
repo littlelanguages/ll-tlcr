@@ -31,7 +31,7 @@ let keyWordSet =
 
 type Parser'<'t> = Parser<'t, UserState>
 
-let ws = CharParsers.spaces
+let ws: Parser'<unit> = CharParsers.spaces
 
 let pint32_ws: Parser'<int32> = pint32 .>> ws
 
