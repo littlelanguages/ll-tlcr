@@ -3,4 +3,6 @@ Lang/obj
 
 Lang.Test/bin
 Lang.Test/obj
+Lang.Test/TestResults
+
 .fake

@@ -105,3 +105,10 @@ factorRef.Value <-
          .>>. expression
          |>> (fun ((c, t), e) -> If(c, t, e)))
     <|> (lowerIdentifier |>> Var)
+
+let parseProduction p text =
+    match run p text with
+    | Success(result, _, l) -> Core.Ok result
+    | Failure(msg, _, _) -> Core.Error msg
+
+let parse text =parseProduction expression text
