@@ -8,6 +8,10 @@ type Type =
 
 type Subst = Subst of Map<string, Type>
 
+type Scheme = Scheme of List<string> * Type
+
+type Pump = Pump of int
+
 let typeBool = TCon "Bool"
 let typeInt = TCon "Int"
 
@@ -43,6 +47,9 @@ module Subst =
 
     let get k (Subst s) = Map.tryFind k s
 
+    let remove ns (Subst s) =
+        Map.filter (fun k _ -> not (Set.contains k ns)) s |> Subst
+
     let rec prettyPrint =
         function
         | Subst s ->
@@ -51,3 +58,28 @@ module Subst =
             |> String.concat ", "
 
     let size (Subst s) = Map.count s
+
+module Pump =
+    let next (Pump i) =
+        (sprintf "V%i" i |> TVar, i + 1 |> Pump)
+
+module Scheme =
+    let ftv (Scheme(vs, t)) =
+        Set.ofList vs |> Set.difference (Type.ftv t)
+
+    let apply (Scheme(vs, t)) s =
+        let vsNames = Set.ofList vs
+        let s' = Subst.remove vsNames s
+
+        Scheme(vs, Type.apply s' t)
+
+    let instantiate (Scheme(vs, t)) p =
+        let ffun (s, p) t =
+            let i, p' = Pump.next p in Map.add t i s, p'
+
+        let (s, p') = List.fold ffun (Map.empty, p) vs
+
+        Type.apply (Subst s) t, p'
+
+    let prettyPrint (Scheme(vs, t)) =
+        sprintf "forall %s. %s" (String.concat ", " vs) (Type.prettyPrint t)
