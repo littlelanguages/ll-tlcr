@@ -1,7 +1,6 @@
 module Tests
 
 open Xunit
-open FParsec
 open Microsoft.FSharp.Core.Result
 
 [<Fact>]
