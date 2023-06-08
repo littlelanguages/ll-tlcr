@@ -12,6 +12,8 @@ type Scheme = Scheme of List<string> * Type
 
 type Pump = Pump of int
 
+type TypeEnv = TypeEnv of Map<string, Scheme>
+
 let typeBool = TCon "Bool"
 let typeInt = TCon "Int"
 
@@ -67,7 +69,7 @@ module Scheme =
     let ftv (Scheme(vs, t)) =
         Set.ofList vs |> Set.difference (Type.ftv t)
 
-    let apply (Scheme(vs, t)) s =
+    let apply s (Scheme(vs, t)) =
         let vsNames = Set.ofList vs
         let s' = Subst.remove vsNames s
 
@@ -83,3 +85,20 @@ module Scheme =
 
     let prettyPrint (Scheme(vs, t)) =
         sprintf "forall %s. %s" (String.concat ", " vs) (Type.prettyPrint t)
+
+
+module TypeEnv =
+    let extend x s (TypeEnv te) = TypeEnv(Map.add x s te)
+
+    let apply s (TypeEnv te) =
+        Map.map (fun _ -> Scheme.apply s) te |> TypeEnv
+
+    let ftv (TypeEnv te) =
+        te |> Map.toList |> List.map (fun (_, b) -> Scheme.ftv b) |> Set.unionMany
+
+    let scheme n (TypeEnv te) = Map.tryFind n te
+
+    let generalise t te =
+        let vs = Set.difference (Type.ftv t) (ftv te) |> Set.toList
+
+        Scheme(vs, t)
