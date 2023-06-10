@@ -44,6 +44,8 @@ module Type =
 module Subst =
     let empty = Subst Map.empty
 
+    let singleton k v = Subst(Map.empty |> Map.add k v)
+
     let compose (Subst s1' as s1) (Subst s2') =
         Map.fold (fun s k v -> Map.add k (Type.apply s1 v) s) s1' s2' |> Subst
 
@@ -62,8 +64,22 @@ module Subst =
     let size (Subst s) = Map.count s
 
 module Pump =
+    let init = Pump 0
+
     let next (Pump i) =
         (sprintf "V%i" i |> TVar, i + 1 |> Pump)
+
+    let nextN n p =
+        let rec loop i p =
+            if i = 0 then
+                [], p
+            else
+                let v, p = next p
+                let vs, p = loop (i - 1) p
+
+                v :: vs, p
+
+        loop n p
 
 module Scheme =
     let ftv (Scheme(vs, t)) =
@@ -71,9 +87,9 @@ module Scheme =
 
     let apply s (Scheme(vs, t)) =
         let vsNames = Set.ofList vs
-        let s' = Subst.remove vsNames s
+        let s = Subst.remove vsNames s
 
-        Scheme(vs, Type.apply s' t)
+        Scheme(vs, Type.apply s t)
 
     let instantiate (Scheme(vs, t)) p =
         let ffun (s, p) t =
@@ -88,17 +104,13 @@ module Scheme =
 
 
 module TypeEnv =
+    let empty = TypeEnv Map.empty
+
     let extend x s (TypeEnv te) = TypeEnv(Map.add x s te)
 
     let apply s (TypeEnv te) =
         Map.map (fun _ -> Scheme.apply s) te |> TypeEnv
 
-    let ftv (TypeEnv te) =
-        te |> Map.toList |> List.map (fun (_, b) -> Scheme.ftv b) |> Set.unionMany
-
     let scheme n (TypeEnv te) = Map.tryFind n te
 
-    let generalise t te =
-        let vs = Set.difference (Type.ftv t) (ftv te) |> Set.toList
-
-        Scheme(vs, t)
+    let generalise t te = Scheme(Type.ftv t |> Set.toList, t)
