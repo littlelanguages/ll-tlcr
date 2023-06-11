@@ -3,6 +3,7 @@ module Typing
 type Type =
     | TArr of Type * Type
     | TCon of string
+    | TRecord of Map<string, Type>
     | TTuple of Type list
     | TVar of string
 
@@ -22,6 +23,7 @@ module Type =
         function
         | TArr(t1, t2) -> Set.union (ftv t1) (ftv t2)
         | TCon _ -> Set.empty
+        | TRecord m -> Map.toList m |> List.map snd |> List.map ftv |> Set.unionMany
         | TTuple ts -> List.map ftv ts |> Set.unionMany
         | TVar v -> Set.singleton v
 
@@ -30,6 +32,7 @@ module Type =
         function
         | TArr(t1, t2) -> TArr(apply s t1, apply s t2)
         | TCon _ as t -> t
+        | TRecord m -> TRecord(Map.map (fun k v -> apply s v) m)
         | TTuple ts -> TTuple(List.map (apply s) ts)
         | TVar v -> Map.tryFind v s' |> Option.defaultValue (TVar v)
 
@@ -38,6 +41,11 @@ module Type =
         | TArr(TArr _ as t1, t2) -> sprintf "(%s) -> %s" (prettyPrint t1) (prettyPrint t2)
         | TArr(t1, t2) -> sprintf "%s -> %s" (prettyPrint t1) (prettyPrint t2)
         | TCon s -> s
+        | TRecord m ->
+            Map.toSeq m
+            |> Seq.map (fun (k, v) -> sprintf "%s: %s" k (prettyPrint v))
+            |> String.concat ", "
+            |> sprintf "{ %s }"
         | TTuple ts -> sprintf "(%s)" (List.map prettyPrint ts |> String.concat ", ")
         | TVar v -> v
 

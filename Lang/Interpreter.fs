@@ -5,6 +5,7 @@ open Parser
 type Value =
     | VInt of int
     | VBool of bool
+    | VRecord of Map<string, Value>
     | VTuple of Value list
     | VFun of (Value -> Value)
 
@@ -16,6 +17,7 @@ let rec evaluate (e: Expression) (env: Env) : Value =
     match e with
     | LInt i -> VInt i
     | LBool b -> VBool b
+    | LRecord rs -> rs |> List.map (fun (n, e) -> n, evaluate e env) |> Map.ofList |> VRecord
     | LTuple es -> VTuple(List.map (fun e -> evaluate e env) es)
     | Var x ->
         match Map.tryFind x env.env with
@@ -74,12 +76,12 @@ module Value =
         match v with
         | VInt i -> sprintf "%d" i
         | VBool b -> sprintf "%b" b
+        | VRecord rs ->
+            sprintf
+                "{%s}"
+                (String.concat ", " (List.map (fun (n, v) -> sprintf "%s = %s" n (prettyPrint v)) (Map.toList rs)))
         | VTuple vs -> sprintf "(%s)" (String.concat ", " (List.map prettyPrint vs))
         | VFun _ -> "function"
 
     let rec prettyPrintWith v t =
-        match v with
-        | VInt i -> sprintf "%d: %s" i (Typing.Type.prettyPrint t)
-        | VBool b -> sprintf "%b: %s" b (Typing.Type.prettyPrint t)
-        | VTuple vs -> sprintf "(%s): %s" (String.concat ", " (List.map prettyPrint vs)) (Typing.Type.prettyPrint t)
-        | VFun _ -> sprintf "function: %s" (Typing.Type.prettyPrint t)
+        sprintf "%s: %s" (prettyPrint v) (Typing.Type.prettyPrint t)

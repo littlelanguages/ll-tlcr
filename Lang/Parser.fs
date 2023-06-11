@@ -18,6 +18,7 @@ type Expression =
     | LetRec of Declaration list * Expression
     | LBool of bool
     | LInt of int
+    | LRecord of (string * Expression) list
     | LTuple of Expression list
     | Op of Expression * Op * Expression
     | Var of string
@@ -96,6 +97,10 @@ factorRef.Value <-
     <|> (pstring_ws "False" >>% LBool false)
     <|> ((tuple4 (pchar_ws '\\') lowerIdentifier (pstring_ws "->") expression)
          |>> (fun (_, l, _, e) -> Lambda(l, e)))
+    <|> (pchar_ws '{'
+         >>. sepBy (tuple3 lowerIdentifier (pchar_ws '=') expression) (pchar_ws ';')
+         .>> pchar_ws '}'
+         |>> (fun fields -> LRecord(List.map (fun (n, _, e) -> (n, e)) fields)))
     <|> (pstring_ws "let" >>. opt (pstring_ws "rec") .>>. declarations
          .>> pstring_ws "in"
          .>>. expression
@@ -111,4 +116,4 @@ let parseProduction p text =
     | Success(result, _, l) -> Core.Ok result
     | Failure(msg, _, _) -> Core.Error msg
 
-let parse text =parseProduction expression text
+let parse text = parseProduction expression text

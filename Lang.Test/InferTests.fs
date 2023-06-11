@@ -78,6 +78,11 @@ let ``infer LInt`` () =
     assertInferenceEquals TypeEnv.empty "123" "Int" []
 
 [<Fact>]
+let ``infer LRecord`` () =
+    assertInferenceEquals TypeEnv.empty "{a = 123; b = True}" "{ a: Int, b: Bool }" []
+
+
+[<Fact>]
 let ``infer Op`` () =
     let env =
         TypeEnv.empty
@@ -150,3 +155,8 @@ let ``let rec? identity a = a in let rec? v1 = identity 10; v2 = identity True i
 
     assertSolve "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v1" "Int"
     assertSolve "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v2" "Bool"
+
+[<Fact>]
+let ``let rec? value a b = { a = a; b = b } in value`` () =
+    assertSolve "let value a b = { a = a; b = b } in value" "V2 -> V3 -> { a: V2, b: V3 }"
+    assertSolve "let rec value a b = { a = a; b = b } in value" "V5 -> V6 -> { a: V5, b: V6 }"

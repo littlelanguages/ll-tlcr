@@ -79,6 +79,13 @@ let ``parse literal int`` () =
     Assert.Equal(Parser.LInt 123 |> Core.Ok, Parser.parse "123")
 
 [<Fact>]
+let ``parse literal record`` () =
+    Assert.Equal(
+        [ "a", Parser.LInt 123; "b", Parser.LBool true ] |> Parser.LRecord |> Core.Ok,
+        Parser.parse "{ a = 123; b = True}"
+    )
+
+[<Fact>]
 let ``parse lowerIdentifier`` () =
     Assert.Equal("name" |> Core.Ok, Parser.parseProduction Parser.lowerIdentifier "name")
     Assert.Equal("nAm22e" |> Core.Ok, Parser.parseProduction Parser.lowerIdentifier "nAm22e")

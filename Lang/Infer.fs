@@ -18,6 +18,8 @@ let solve (c: Constraints) =
             | t, TVar v when not (Set.contains v (Type.ftv t)) -> unify (Subst.compose (Subst.singleton v t) s) c
             | TArr(t1, t2), TArr(t3, t4) -> unify s ((t1, t3) :: (t2, t4) :: c)
             | TCon s1, TCon s2 when s1 = s2 -> unify s c
+            | TRecord m1, TRecord m2 when Map.count m1 = Map.count m2 ->
+                unify s ((Map.toSeq m1 |> Seq.map (fun (k, v) -> (v, Map.find k m2)) |> Seq.toList) @ c)
             | TTuple ts1, TTuple ts2 when List.length ts1 = List.length ts2 -> unify s (List.zip ts1 ts2 @ c)
             | t1', t2' ->
                 sprintf "Unification failed: %s -- %s" (Type.prettyPrint t1) (Type.prettyPrint t2)
@@ -44,6 +46,16 @@ let rec infer (env, p) =
         TArr(t1, t), p, c
     | Parser.LBool _ -> typeBool, p, []
     | Parser.LInt _ -> typeInt, p, []
+    | Parser.LRecord rs ->
+        let ts, p, c =
+            List.fold
+                (fun (ts, p, c) (x, e) ->
+                    let t, p, c' = infer (env, p) e
+                    t :: ts, p, c' @ c)
+                ([], p, [])
+                rs
+
+        TRecord(List.zip (List.map fst rs) (List.rev ts) |> Map.ofList), p, c
     | Parser.LTuple es ->
         let ts, p, c =
             List.fold
