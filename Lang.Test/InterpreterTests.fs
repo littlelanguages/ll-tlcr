@@ -64,7 +64,7 @@ let ``LInt`` () =
     assertExecute "-123" "-123: Int"
 
 [<Fact>]
-let ``LRecord§`` () =
+let ``LRecord`` () =
     assertExecute "{ }" "{}: {  }"
     assertExecute "{ a = 123; b = True; c = 99 }" "{a = 123, b = true, c = 99}: { a: Int, b: Bool, c: Int }"
 
