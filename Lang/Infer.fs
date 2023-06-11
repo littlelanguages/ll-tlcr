@@ -28,39 +28,39 @@ let solve (c: Constraints) =
 let rec infer (env, p) =
     function
     | Parser.App(e1, e2) ->
-        let (t1, p1, c1) = infer (env, p) e1
-        let (t2, p2, c2) = infer (env, p1) e2
-        let (t, p3) = Pump.next p2
-        (t, p3, (t1, TArr(t2, t)) :: c1 @ c2)
+        let t1, p, c1 = infer (env, p) e1
+        let t2, p, c2 = infer (env, p) e2
+        let t, p = Pump.next p
+        t, p, (t1, TArr(t2, t)) :: c1 @ c2
     | Parser.If(e1, e2, e3) ->
-        let (t1, p1, c1) = infer (env, p) e1
-        let (t2, p2, c2) = infer (env, p1) e2
-        let (t3, p3, c3) = infer (env, p2) e3
-        (t2, p3, (t1, typeBool) :: (t2, t3) :: c1 @ c2 @ c3)
+        let t1, p, c1 = infer (env, p) e1
+        let t2, p, c2 = infer (env, p) e2
+        let t3, p, c3 = infer (env, p) e3
+        t2, p, (t1, typeBool) :: (t2, t3) :: c1 @ c2 @ c3
     | Parser.Lambda(x, e) ->
-        let (t1, p1) = Pump.next p
+        let t1, p = Pump.next p
         let env' = TypeEnv.extend x (Scheme([], t1)) env
-        let (t, p2, c) = infer (env', p1) e
-        (TArr(t1, t), p2, c)
-    | Parser.LBool _ -> (typeBool, p, [])
-    | Parser.LInt _ -> (typeInt, p, [])
+        let t, p, c = infer (env', p) e
+        TArr(t1, t), p, c
+    | Parser.LBool _ -> typeBool, p, []
+    | Parser.LInt _ -> typeInt, p, []
     | Parser.LTuple es ->
-        let (ts, p1, c) =
+        let ts, p, c =
             List.fold
                 (fun (ts, p, c) e ->
-                    let (t, p', c') = infer (env, p) e
-                    (t :: ts, p', c' @ c))
+                    let t, p, c' = infer (env, p) e
+                    t :: ts, p, c' @ c)
                 ([], p, [])
                 es
 
-        (TTuple(List.rev ts), p1, c)
+        TTuple(List.rev ts), p, c
 
     | Parser.Let(decs, e) ->
         let rec inferDecs (env, p, c) =
             function
-            | [] -> (env, p, c)
+            | [] -> env, p, c
             | (x, e) :: decs ->
-                let (t, p1, c1) = infer (env, p) e
+                let t, p1, c1 = infer (env, p) e
 
                 let s = solve c1 |> Result.defaultWith (fun msg -> failwith msg)
 
@@ -72,9 +72,9 @@ let rec infer (env, p) =
 
                 inferDecs (env2, p1, c1 @ c) decs
 
-        let (env1, p1, c) = inferDecs (env, p, []) decs
-        let (t, p2, c') = infer (env1, p1) e
-        (t, p2, c @ c')
+        let env1, p1, c = inferDecs (env, p, []) decs
+        let t, p2, c' = infer (env1, p1) e
+        t, p2, c @ c'
     | Parser.LetRec(decs, e) ->
         let fix env e p =
             let t1, p1, c1 = infer (env, p) e
@@ -96,27 +96,29 @@ let rec infer (env, p) =
         let s = solve c2 |> Result.defaultWith (fun msg -> failwith msg)
 
         let env2 = TypeEnv.apply s env1
+
         let env3 =
             cvsNames
             |> List.fold
                 (fun env' (name, cv) -> TypeEnv.extend name (TypeEnv.generalise (Type.apply s cv) env2) env')
                 env2
-        let (t, p3, c3) = infer (env3, p2) e
-        (t, p3, c3 @ c2)
+
+        let t, p3, c3 = infer (env3, p2) e
+        t, p3, c3 @ c2
 
     | Parser.Op(e1, Parser.Equals, e2) ->
-        let (t1, p1, c1) = infer (env, p) e1
-        let (t2, p2, c2) = infer (env, p1) e2
-        (typeBool, p2, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2)
+        let t1, p, c1 = infer (env, p) e1
+        let t2, p, c2 = infer (env, p) e2
+        typeBool, p, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2
     | Parser.Op(e1, _, e2) ->
-        let (t1, p1, c1) = infer (env, p) e1
-        let (t2, p2, c2) = infer (env, p1) e2
-        (typeInt, p2, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2)
+        let t1, p, c1 = infer (env, p) e1
+        let t2, p, c2 = infer (env, p) e2
+        typeInt, p, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2
     | Parser.Var x ->
         let scheme = TypeEnv.scheme x env
 
         match scheme with
         | Some s ->
             let t1, p1 = Scheme.instantiate s p
-            (t1, p1, [])
+            t1, p1, []
         | _ -> failwithf "Unknown name: %s" x

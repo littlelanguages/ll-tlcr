@@ -1,7 +1,6 @@
 module InferTests
 
 open Xunit
-open FParsec
 open Microsoft.FSharp.Core.Result
 
 open Infer
