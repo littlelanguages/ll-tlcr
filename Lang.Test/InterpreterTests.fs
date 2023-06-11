@@ -38,6 +38,7 @@ let ``Lam`` () =
 [<Fact>]
 let ``Let`` () =
     assertExecute "let add a b = a + b ; incr = add 1 in incr 10" "11: Int"
+    assertExecute "let x n = let ss b = if (b == n) 1 else 2 in ss 5 in x" "function: Int -> Int"
 
 [<Fact>]
 let ``LetRec`` () =
