@@ -21,6 +21,7 @@ type Expression =
     | LRecord of (string * Expression) list
     | LTuple of Expression list
     | Op of Expression * Op * Expression
+    | RecProj of Expression * string
     | Var of string
 
 and Declaration = string * Expression
@@ -47,25 +48,6 @@ let multiplicativeOps: Parser'<Op> =
 
 let factor, factorRef = createParserForwardedToRef<Expression, unit> ()
 
-let multiplicative: Parser'<Expression> =
-    factor .>>. many (multiplicativeOps .>>. factor)
-    |>> (fun (f, fs) -> List.fold (fun e1 (op, e2) -> Op(e1, op, e2)) f fs)
-
-let additive: Parser'<Expression> =
-    multiplicative .>>. many (additiveOps .>>. multiplicative)
-    |>> (fun (f, fs) -> List.fold (fun e1 (op, e2) -> Op(e1, op, e2)) f fs)
-
-let relational: Parser'<Expression> =
-    additive .>>. opt ((pstring_ws "==" >>% Equals) .>>. additive)
-    |>> (fun (e1, e2) ->
-        match e2 with
-        | Some(op, e2) -> Op(e1, op, e2)
-        | None -> e1)
-
-let expression: Parser'<Expression> =
-    (many1 (relational .>> ws))
-    |>> (fun es -> List.fold (fun e1 e2 -> App(e1, e2)) es.Head es.Tail)
-
 let lowerIdentifier: Parser'<string> =
     let lowerIdentifierString: Parser<string, unit> =
         satisfy isLower .>>. manyChars (satisfy (fun c -> isLetter c || isDigit c))
@@ -83,6 +65,29 @@ let lowerIdentifier: Parser'<string> =
         else // result is keyword, so backtrack to before the string
             stream.BacktrackTo(state)
             Reply(Error, expectedIdentifier)
+
+let recordProjection: Parser'<Expression> =
+    factor .>>. many (pchar_ws '.' >>. lowerIdentifier)
+    |>> (fun (e, fs) -> List.fold (fun e f -> RecProj(e, f)) e fs)
+
+let multiplicative: Parser'<Expression> =
+    recordProjection .>>. many (multiplicativeOps .>>. recordProjection)
+    |>> (fun (f, fs) -> List.fold (fun e1 (op, e2) -> Op(e1, op, e2)) f fs)
+
+let additive: Parser'<Expression> =
+    multiplicative .>>. many (additiveOps .>>. multiplicative)
+    |>> (fun (f, fs) -> List.fold (fun e1 (op, e2) -> Op(e1, op, e2)) f fs)
+
+let relational: Parser'<Expression> =
+    additive .>>. opt ((pstring_ws "==" >>% Equals) .>>. additive)
+    |>> (fun (e1, e2) ->
+        match e2 with
+        | Some(op, e2) -> Op(e1, op, e2)
+        | None -> e1)
+
+let expression: Parser'<Expression> =
+    (many1 (relational .>> ws))
+    |>> (fun es -> List.fold (fun e1 e2 -> App(e1, e2)) es.Head es.Tail)
 
 let declaration: Parser<Declaration, unit> =
     (lowerIdentifier .>>. many lowerIdentifier .>> pchar_ws '=' .>>. expression

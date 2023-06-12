@@ -94,3 +94,10 @@ let ``parse lowerIdentifier`` () =
 [<Fact>]
 let ``parse parenthises expression`` () =
     Assert.Equal(Parser.Var "name" |> Core.Ok, Parser.parse "(name)")
+
+[<Fact>]
+let ``parse record projection`` () =
+    Assert.Equal(
+        Parser.RecProj(Parser.RecProj(Parser.Var "name", "field1"), "field2") |> Core.Ok,
+        Parser.parse "name.field1.field2"
+    )

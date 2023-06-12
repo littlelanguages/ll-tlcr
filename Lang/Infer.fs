@@ -18,8 +18,18 @@ let solve (c: Constraints) =
             | t, TVar v when not (Set.contains v (Type.ftv t)) -> unify (Subst.compose (Subst.singleton v t) s) c
             | TArr(t1, t2), TArr(t3, t4) -> unify s ((t1, t3) :: (t2, t4) :: c)
             | TCon s1, TCon s2 when s1 = s2 -> unify s c
-            | TRecord m1, TRecord m2 when Map.count m1 = Map.count m2 ->
+            | TRecord(m1, false), TRecord(m2, false) when Map.count m1 = Map.count m2 ->
                 unify s ((Map.toSeq m1 |> Seq.map (fun (k, v) -> (v, Map.find k m2)) |> Seq.toList) @ c)
+            | TRecord(m1, false), TRecord(m2, true) ->
+                let m2' = Map.toSeq m2 |> Seq.map (fun (k, v) -> (v, Map.find k m1)) |> Seq.toList
+
+                let m1' =
+                    Map.filter (fun k _ -> Map.containsKey k m2) m1
+                    |> Map.toSeq
+                    |> Seq.map (fun (k, v) -> (v, Map.find k m2))
+                    |> Seq.toList
+
+                unify s (m1' @ m2' @ c)
             | TTuple ts1, TTuple ts2 when List.length ts1 = List.length ts2 -> unify s (List.zip ts1 ts2 @ c)
             | t1', t2' ->
                 sprintf "Unification failed: %s -- %s" (Type.prettyPrint t1) (Type.prettyPrint t2)
@@ -55,7 +65,7 @@ let rec infer (env, p) =
                 ([], p, [])
                 rs
 
-        TRecord(List.zip (List.map fst rs) (List.rev ts) |> Map.ofList), p, c
+        TRecord(List.zip (List.map fst rs) (List.rev ts) |> Map.ofList, false), p, c
     | Parser.LTuple es ->
         let ts, p, c =
             List.fold
@@ -126,6 +136,10 @@ let rec infer (env, p) =
         let t1, p, c1 = infer (env, p) e1
         let t2, p, c2 = infer (env, p) e2
         typeInt, p, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2
+    | Parser.RecProj(e, x) ->
+        let t, p, c = infer (env, p) e
+        let t1, p = Pump.next p
+        t1, p, (t, (Map.empty |> Map.add x t1, true) |> TRecord) :: c
     | Parser.Var x ->
         let scheme = TypeEnv.scheme x env
 
