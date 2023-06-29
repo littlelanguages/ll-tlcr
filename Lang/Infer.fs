@@ -99,34 +99,34 @@ let rec infer (env, p) =
         t, p2, c @ c'
     | Parser.LetRec(decs, e) ->
         let fix env e p =
-            let t1, p1, c1 = infer (env, p) e
-            let tv, p2 = Pump.next p1
-            tv, p2, (TArr(tv, tv), t1) :: c1
+            let t1, p, c1 = infer (env, p) e
+            let tv, p = Pump.next p
+            tv, p, (TArr(tv, tv), t1) :: c1
 
-        let cvs, p1 = Pump.nextN (List.length decs) p
+        let cvs, p = Pump.nextN (List.length decs) p
         let names = List.map fst decs
         let cvsNames = List.zip names cvs
 
-        let env1 =
+        let env' =
             cvsNames
             |> List.fold (fun env' (name, cv) -> TypeEnv.extend name (Scheme([], cv)) env') env
 
-        let t1, p2, c1 =
-            fix env1 (Parser.Lambda("_bob", Parser.LTuple(List.map (fun (_, e) -> e) decs))) p1
+        let t1, p, c1 =
+            fix env' (Parser.Lambda("_bob", Parser.LTuple(List.map (fun (_, e) -> e) decs))) p
 
         let c2 = (TTuple cvs, t1) :: c1
         let s = solve c2 |> Result.defaultWith (fun msg -> failwith msg)
 
-        let env2 = TypeEnv.apply s env1
-
-        let env3 =
+        let env = TypeEnv.apply s env
+        
+        let env =
             cvsNames
             |> List.fold
-                (fun env' (name, cv) -> TypeEnv.extend name (TypeEnv.generalise (Type.apply s cv) env2) env')
-                env2
+                (fun env' (name, cv) -> TypeEnv.extend name (TypeEnv.generalise (Type.apply s cv) env) env')
+                env
 
-        let t, p3, c3 = infer (env3, p2) e
-        t, p3, c3 @ c2
+        let t, p, c3 = infer (env, p) e
+        t, p, c3 @ c2
 
     | Parser.Op(e1, Parser.Equals, e2) ->
         let t1, p, c1 = infer (env, p) e1

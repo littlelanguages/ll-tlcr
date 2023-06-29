@@ -1,1 +1,2 @@
-module Program = let [<EntryPoint>] main _ = 0
+[<EntryPoint>]
+let main args = Program.main args

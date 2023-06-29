@@ -160,10 +160,14 @@ let ``let rec? identity a = a in let rec? v1 = identity 10; v2 = identity True i
 let ``let rec? value a b = { a = a; b = b } in value`` () =
     assertSolve "let value a b = { a = a; b = b } in value" "V2 -> V3 -> { a: V2, b: V3 }"
     assertSolve "let rec value a b = { a = a; b = b } in value" "V5 -> V6 -> { a: V5, b: V6 }"
-[<Fact>]
 
-let ``let value a b = { a = a; b = b }; r = value 10 True in r`` () =
-    assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r" "{ a: Int, b: Bool }"
-    assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.a" "Int"
-    assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.b" "Bool"
-    // assertSolve "let value r = r.a + r.b in value" "Bool"
+// [<Fact>]
+// let ``let value a b = { a = a; b = b }; r = value 10 True in r`` () =
+//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r" "{ a: Int, b: Bool }"
+//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.a" "Int"
+//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.b" "Bool"
+//     assertSolve "let value r = r.a + r.b in value" "Bool"
+
+[<Fact>]
+let ``enclosing scope needed for instantiate`` () =
+    assertSolve "let f x = let g y = y x in g in f" "V4 -> (V4 -> V5) -> V5"

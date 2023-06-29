@@ -100,11 +100,12 @@ module Scheme =
 
     let instantiate (Scheme(vs, t)) p =
         let ffun (s, p) t =
-            let i, p' = Pump.next p in Map.add t i s, p'
+            let i, p = Pump.next p
+            Map.add t i s, p
 
-        let (s, p') = List.fold ffun (Map.empty, p) vs
+        let s, p = List.fold ffun (Map.empty, p) vs
 
-        Type.apply (Subst s) t, p'
+        Type.apply (Subst s) t, p
 
     let prettyPrint (Scheme(vs, t)) =
         sprintf "forall %s. %s" (String.concat ", " vs) (Type.prettyPrint t)
@@ -115,9 +116,13 @@ module TypeEnv =
 
     let extend x s (TypeEnv te) = Map.add x s te |> TypeEnv
 
+    let ftv (TypeEnv te) =
+        Map.toSeq te |> Seq.map (fun (_, s) -> Scheme.ftv s) |> Set.unionMany
+
     let apply s (TypeEnv te) =
         Map.map (fun _ -> Scheme.apply s) te |> TypeEnv
 
     let scheme n (TypeEnv te) = Map.tryFind n te
 
-    let generalise t te = Scheme(Type.ftv t |> Set.toList, t)
+    let generalise t te =
+        Scheme(Set.difference (Type.ftv t) (ftv te) |> Set.toList, t)
