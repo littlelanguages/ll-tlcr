@@ -123,10 +123,10 @@ let assertSolve text te =
     let actual = Parser.parse (text) |> map (infer (TypeEnv.empty, p))
 
     match actual with
-    | Result.Ok(t, _, cs) ->
-        match solve cs with
-        | Result.Ok s -> Assert.Equal(te, Type.prettyPrint (Type.apply s t))
-        | Result.Error msg -> failwithf "Failed to solve: %s" msg
+    | Result.Ok(t, p, cs) ->
+        match solve cs p with
+        | Result.Ok s, _ -> Assert.Equal(te, Type.prettyPrint (Type.apply s t))
+        | Result.Error msg, _ -> failwithf "Failed to solve: %s" msg
     | Result.Error msg -> failwithf "Failed to parse: %s" msg
 
 let private success input expected = assertSolve expected input
@@ -207,9 +207,9 @@ let ``let value a b = { a = a; b = b }; r = value 10 True in r`` () =
     "let value a b = { a = a; b = b }; r = value 10 True in r.a" |> success "Int"
     "let value a b = { a = a; b = b }; r = value 10 True in r.b" |> success "Bool"
     "let value r = r.a + r.b in value {a = 1; b = 2}" |> success "Int"
-    "let value r = r.a + r.b in value" |> success "{ a: Int, b: Int | V5 } -> Int"
+    "let value r = r.a + r.b in value" |> success "{ a: Int, b: Int | V6 } -> Int"
     "let value r = r.a in value" |> success "{ a: V3 | V4 } -> V3"
-    "let value r = r.a r.b in value" |> success "{ a: V7 -> V8, b: V7 | V6 } -> V8"
+    "let value r = r.a r.b in value" |> success "{ a: V7 -> V8, b: V7 | V9 } -> V8"
 
 [<Fact>]
 let ``enclosing scope needed for instantiate`` () =

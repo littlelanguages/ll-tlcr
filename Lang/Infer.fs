@@ -7,8 +7,8 @@ type Constraints = Constraint list
 
 type InferState = TypeEnv * Pump
 
-let solve (c: Constraints) =
-    let p = Pump 10000 |> ref
+let solve (c: Constraints) (p: Pump) =
+    let p = ref p
 
     let next () =
         let p' = p.Value
@@ -58,11 +58,11 @@ let solve (c: Constraints) =
                     (TRowExtend(l1, t1, newInnerType), innerType) :: (row1, row2') :: c |> unify s
                 | Some(t2', row2') -> (t1, t2') :: (row1, row2') :: c |> unify s
 
-            | t1', t2' ->
+            | _ ->
                 sprintf "Unification failed: %s -- %s" (Type.prettyPrint xt1) (Type.prettyPrint xt2)
                 |> Error
 
-    unify Subst.empty c
+    unify Subst.empty c, p.Value
 
 let rec infer (env, p) =
     function
@@ -99,9 +99,10 @@ let rec infer (env, p) =
             function
             | [] -> env, p, c
             | (x, e) :: decs ->
-                let t, p1, c1 = infer (env, p) e
+                let t, p, c1 = infer (env, p) e
 
-                let s = solve c1 |> Result.defaultWith (fun msg -> failwith msg)
+                let solution, p = solve c1 p
+                let s = solution |> Result.defaultWith (fun msg -> failwith msg)
 
                 let env1 = TypeEnv.apply s env
 
@@ -109,7 +110,7 @@ let rec infer (env, p) =
 
                 let env2 = TypeEnv.extend x scheme env1
 
-                inferDecs (env2, p1, c1 @ c) decs
+                inferDecs (env2, p, c1 @ c) decs
 
         let env1, p1, c = inferDecs (env, p, []) decs
         let t, p2, c' = infer (env1, p1) e
@@ -132,7 +133,8 @@ let rec infer (env, p) =
             fix env' (Parser.Lambda("_bob", Parser.LTuple(List.map (fun (_, e) -> e) decs))) p
 
         let c2 = (TTuple cvs, t1) :: c1
-        let s = solve c2 |> Result.defaultWith (fun msg -> failwith msg)
+        let solution, p = solve c2 p
+        let s = solution |> Result.defaultWith (fun msg -> failwith msg)
 
         let env = TypeEnv.apply s env
 

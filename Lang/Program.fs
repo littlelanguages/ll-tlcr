@@ -1,5 +1,5 @@
-﻿
-module Program
+﻿module Program
+
 open Typing
 
 let runText text =
@@ -9,15 +9,15 @@ let runText text =
 
     match ast with
     | Result.Ok e ->
-        let t, _, cs = Infer.infer (TypeEnv.empty, p) e
+        let t, p, cs = Infer.infer (TypeEnv.empty, p) e
 
-        match Infer.solve cs with
-        | Result.Ok s ->
+        match Infer.solve cs p with
+        | Result.Ok s, _ ->
             let t = Type.apply s t
             let actual = Interpreter.evaluate e (Interpreter.emptyEnv ())
             printfn "%s" (Interpreter.Value.prettyPrintWith actual t)
             0
-        | Result.Error msg ->
+        | Result.Error msg, _ ->
             printfn "Type Error: %s" msg
             1
 
