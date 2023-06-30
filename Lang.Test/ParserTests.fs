@@ -3,6 +3,12 @@ module Tests
 open Xunit
 open Microsoft.FSharp.Core.Result
 
+let success expected input =
+    let input' = Parser.parse input
+    let expected' = expected |> Core.Ok
+
+    Assert.Equal(expected', input')
+
 [<Fact>]
 let ``parse additive operator`` () =
     Parser.parseProduction Parser.additiveOps "-" |> isOk |> Assert.True
@@ -15,75 +21,68 @@ let ``parse multiplicative operator`` () =
 
 [<Fact>]
 let ``parse additive expression`` () =
-    Assert.Equal(
-        Parser.Op(Parser.Op(Parser.Var "x", Parser.Plus, Parser.Var "y"), Parser.Minus, Parser.Var "z")
-        |> Core.Ok,
-        Parser.parse "x + y - z"
-    )
+    "x + y - z"
+    |> success (Parser.Op(Parser.Op(Parser.Var "x", Parser.Plus, Parser.Var "y"), Parser.Minus, Parser.Var "z"))
 
 [<Fact>]
 let ``parse arithmatic expression`` () =
-    Assert.Equal(
-        Parser.Op(Parser.Var "x", Parser.Plus, Parser.Op(Parser.Var "y", Parser.Times, Parser.Var "z"))
-        |> Core.Ok,
-        Parser.parse "x + y * z"
-    )
+    "x + y * z"
+    |> success (Parser.Op(Parser.Var "x", Parser.Plus, Parser.Op(Parser.Var "y", Parser.Times, Parser.Var "z")))
 
 [<Fact>]
 let ``parse multiplicative expression`` () =
-    Assert.Equal(
-        Parser.Op(Parser.Op(Parser.Var "x", Parser.Times, Parser.Var "y"), Parser.Divide, Parser.Var "z")
-        |> Core.Ok,
-        Parser.parse "x * y / z"
-    )
+    "x * y / z"
+    |> success (Parser.Op(Parser.Op(Parser.Var "x", Parser.Times, Parser.Var "y"), Parser.Divide, Parser.Var "z"))
 
 [<Fact>]
 let ``parse relational expression`` () =
-    Assert.Equal(Parser.Op(Parser.Var "x", Parser.Equals, Parser.Var "y") |> Core.Ok, Parser.parse "x == y")
+    "x == y" |> success (Parser.Op(Parser.Var "x", Parser.Equals, Parser.Var "y"))
 
 [<Fact>]
 let ``parse if`` () =
-    Assert.Equal(
-        Parser.If(Parser.LBool true, Parser.Lambda("x", Parser.Var "x"), Parser.LInt 100)
-        |> Core.Ok,
-        Parser.parse "if (True) (\\x -> x) else 100"
-    )
+    "if (True) (\\x -> x) else 100"
+    |> success (Parser.If(Parser.LBool true, Parser.Lambda("x", Parser.Var "x"), Parser.LInt 100))
 
 [<Fact>]
 let ``parse lambda`` () =
-    Assert.Equal(Parser.Lambda("x", Parser.Var "x") |> Core.Ok, Parser.parse "\\x -> x")
+    "\\x -> x" |> success (Parser.Lambda("x", Parser.Var "x"))
 
 [<Fact>]
 let ``parse let`` () =
-    Assert.Equal(
-        Parser.Let([ ("identity", Parser.Lambda("n", Parser.Var "n")) ], Parser.Var "identity")
-        |> Core.Ok,
-        Parser.parse "let identity n = n in identity"
-    )
+    "let identity n = n in identity"
+    |> success (Parser.Let([ ("identity", Parser.Lambda("n", Parser.Var "n")) ], Parser.Var "identity"))
 
 [<Fact>]
 let ``parse let rec`` () =
-    Assert.Equal(
-        Parser.LetRec([ ("identity", Parser.Lambda("n", Parser.Var "n")) ], Parser.Var "identity")
-        |> Core.Ok,
-        Parser.parse "let rec identity n = n in identity"
-    )
+    "let rec identity n = n in identity"
+    |> success (Parser.LetRec([ ("identity", Parser.Lambda("n", Parser.Var "n")) ], Parser.Var "identity"))
 
 [<Fact>]
 let ``parse literal bool`` () =
-    Assert.Equal(Parser.LBool true |> Core.Ok, Parser.parse "True")
-    Assert.Equal(Parser.LBool false |> Core.Ok, Parser.parse "False")
+    "True" |> success (Parser.LBool true)
+    "False" |> success (Parser.LBool false)
 
 [<Fact>]
-let ``parse literal int`` () =
-    Assert.Equal(Parser.LInt 123 |> Core.Ok, Parser.parse "123")
+let ``parse literal int`` () = "123" |> success (Parser.LInt 123)
 
 [<Fact>]
 let ``parse literal record`` () =
-    Assert.Equal(
-        [ "a", Parser.LInt 123; "b", Parser.LBool true ] |> Parser.LRecord |> Core.Ok,
-        Parser.parse "{ a = 123; b = True}"
+    "{}" |> success Parser.RecordEmpty
+
+    "{ a = 123 }"
+    |> success (Parser.RecordExtend("a", Parser.LInt 123, Parser.RecordEmpty))
+
+    "{ a = 123 | e}"
+    |> success (Parser.RecordExtend("a", Parser.LInt 123, Parser.Var "e"))
+
+    "{ a = 123; b = True}"
+    |> success (
+        Parser.RecordExtend("a", Parser.LInt 123, Parser.RecordExtend("b", Parser.LBool true, Parser.RecordEmpty))
     )
+
+    "{ a = 123; b = True | e}"
+    |> success (Parser.RecordExtend("a", Parser.LInt 123, Parser.RecordExtend("b", Parser.LBool true, Parser.Var "e")))
+
 
 [<Fact>]
 let ``parse lowerIdentifier`` () =
@@ -92,12 +91,11 @@ let ``parse lowerIdentifier`` () =
     Assert.True(Parser.parseProduction Parser.lowerIdentifier "Name" |> Core.Result.isError)
 
 [<Fact>]
-let ``parse parenthises expression`` () =
-    Assert.Equal(Parser.Var "name" |> Core.Ok, Parser.parse "(name)")
+let ``parse parenthises expression`` () = "(name)" |> success (Parser.Var "name")
 
 [<Fact>]
 let ``parse record projection`` () =
-    Assert.Equal(
-        Parser.RecProj(Parser.RecProj(Parser.Var "name", "field1"), "field2") |> Core.Ok,
-        Parser.parse "name.field1.field2"
-    )
+    "x.a" |> success (Parser.RecordSelect(Parser.Var "x", "a"))
+
+    "x.a.b"
+    |> success (Parser.RecordSelect(Parser.RecordSelect(Parser.Var "x", "a"), "b"))

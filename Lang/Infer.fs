@@ -8,31 +8,58 @@ type Constraints = Constraint list
 type InferState = TypeEnv * Pump
 
 let solve (c: Constraints) =
+    let p = Pump 10000 |> ref
+
+    let next () =
+        let p' = p.Value
+        let n, p' = Pump.next p'
+        p.Value <- p'
+        n
+
     let rec unify (s: Subst) =
         function
         | [] -> Ok s
-        | (t1, t2) :: c ->
-            match (Type.apply s t1, Type.apply s t2) with
+        | (xt1, xt2) :: c ->
+            match (Type.apply s xt1, Type.apply s xt2) with
             | TVar v1, TVar v2 when v1 = v2 -> unify s c
             | TVar v, t
             | t, TVar v when not (Set.contains v (Type.ftv t)) -> unify (Subst.compose (Subst.singleton v t) s) c
             | TArr(t1, t2), TArr(t3, t4) -> unify s ((t1, t3) :: (t2, t4) :: c)
             | TCon s1, TCon s2 when s1 = s2 -> unify s c
-            | TRecord(m1, false), TRecord(m2, false) when Map.count m1 = Map.count m2 ->
-                unify s ((Map.toSeq m1 |> Seq.map (fun (k, v) -> (v, Map.find k m2)) |> Seq.toList) @ c)
-            | TRecord(m1, false), TRecord(m2, true) ->
-                let m2' = Map.toSeq m2 |> Seq.map (fun (k, v) -> (v, Map.find k m1)) |> Seq.toList
-
-                let m1' =
-                    Map.filter (fun k _ -> Map.containsKey k m2) m1
-                    |> Map.toSeq
-                    |> Seq.map (fun (k, v) -> (v, Map.find k m2))
-                    |> Seq.toList
-
-                unify s (m1' @ m2' @ c)
             | TTuple ts1, TTuple ts2 when List.length ts1 = List.length ts2 -> unify s (List.zip ts1 ts2 @ c)
+            | TRowEmpty, TRowEmpty -> unify s c
+            | TRowExtend(l1, t1, row1), row2 ->
+                let rec rewriteRow =
+                    function
+                    | TRowExtend(l2, t2, row2) ->
+                        if (l1 = l2) then
+                            Some(t2, row2)
+                        else
+                            match rewriteRow row2 with
+                            | None -> None
+                            | Some(t2', row2') -> Some(t2', TRowExtend(l2, t2, row2'))
+                    | _ -> None
+
+                let mapSecond f (x, y) = (x, f y)
+
+                let rec replaceInnerType newInnerType =
+                    function
+                    | TRowExtend(l, t, row2) ->
+                        replaceInnerType newInnerType row2
+                        |> mapSecond (fun row2' -> TRowExtend(l, t, row2'))
+                    | t -> (t, newInnerType)
+
+
+                match rewriteRow row2 with
+                | None ->
+                    let newInnerType = next ()
+                    let innerType, row2' = replaceInnerType newInnerType row2
+
+                    (TRowExtend(l1, t1, newInnerType), innerType) :: (row1, row2') :: c |> unify s
+                | Some(t2', row2') -> (t1, t2') :: (row1, row2') :: c |> unify s
+
             | t1', t2' ->
-                sprintf "Unification failed: %s -- %s" (Type.prettyPrint t1) (Type.prettyPrint t2)
+                sprintf "Unification failed: %s -- %s" (Type.prettyPrint xt1) (Type.prettyPrint xt2)
                 |> Error
 
     unify Subst.empty c
@@ -56,16 +83,6 @@ let rec infer (env, p) =
         TArr(t1, t), p, c
     | Parser.LBool _ -> typeBool, p, []
     | Parser.LInt _ -> typeInt, p, []
-    | Parser.LRecord rs ->
-        let ts, p, c =
-            List.fold
-                (fun (ts, p, c) (x, e) ->
-                    let t, p, c' = infer (env, p) e
-                    t :: ts, p, c' @ c)
-                ([], p, [])
-                rs
-
-        TRecord(List.zip (List.map fst rs) (List.rev ts) |> Map.ofList, false), p, c
     | Parser.LTuple es ->
         let ts, p, c =
             List.fold
@@ -118,7 +135,7 @@ let rec infer (env, p) =
         let s = solve c2 |> Result.defaultWith (fun msg -> failwith msg)
 
         let env = TypeEnv.apply s env
-        
+
         let env =
             cvsNames
             |> List.fold
@@ -136,10 +153,16 @@ let rec infer (env, p) =
         let t1, p, c1 = infer (env, p) e1
         let t2, p, c2 = infer (env, p) e2
         typeInt, p, (t1, typeInt) :: (t2, typeInt) :: c1 @ c2
-    | Parser.RecProj(e, x) ->
+    | Parser.RecordEmpty -> TRowEmpty, p, []
+    | Parser.RecordExtend(n, e1, e2) ->
+        let t1, p, c1 = infer (env, p) e1
+        let t2, p, c2 = infer (env, p) e2
+        TRowExtend(n, t1, t2), p, c1 @ c2
+    | Parser.RecordSelect(e, n) ->
         let t, p, c = infer (env, p) e
         let t1, p = Pump.next p
-        t1, p, (t, (Map.empty |> Map.add x t1, true) |> TRecord) :: c
+        let t2, p = Pump.next p
+        t1, p, (TRowExtend(n, t1, t2), t) :: c
     | Parser.Var x ->
         let scheme = TypeEnv.scheme x env
 

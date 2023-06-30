@@ -78,9 +78,31 @@ let ``infer LInt`` () =
     assertInferenceEquals TypeEnv.empty "123" "Int" []
 
 [<Fact>]
-let ``infer LRecord`` () =
-    assertInferenceEquals TypeEnv.empty "{a = 123; b = True}" "{ a: Int, b: Bool }" []
+let ``infer RecordEmpty`` () =
+    assertInferenceEquals TypeEnv.empty "{}" "{}" []
 
+[<Fact>]
+let ``infer RecordExtend`` () =
+    let env =
+        TypeEnv.empty
+        |> TypeEnv.extend "x" (Scheme([], TRowExtend("a", typeInt, TRowExtend("b", typeBool, TRowEmpty))))
+
+    assertInferenceEquals env "{}" "{}" []
+    assertInferenceEquals env "{a = 10}" "{ a: Int }" []
+    assertInferenceEquals env "{a = 10 | {}}" "{ a: Int }" []
+    assertInferenceEquals env "{a = 10 | x}" "{ a: Int, a: Int, b: Bool }" []
+    assertInferenceEquals env "{c = 10 | x}" "{ c: Int, a: Int, b: Bool }" []
+    assertInferenceEquals env "{c = 10; d = 11 | x}" "{ c: Int, d: Int, a: Int, b: Bool }" []
+    assertInferenceEquals env "{c = 10 | {d = 11 | x}}" "{ c: Int, d: Int, a: Int, b: Bool }" []
+
+[<Fact>]
+let ``infer RecordSelect`` () =
+    let env =
+        TypeEnv.empty
+        |> TypeEnv.extend "x" (Scheme([], TRowExtend("a", typeInt, TRowExtend("b", typeBool, TRowEmpty))))
+
+    assertInferenceEquals env "x" "{ a: Int, b: Bool }" []
+    assertInferenceEquals env "x.a" "V0" [ "{ a: V0 | V1 } ~ { a: Int, b: Bool }" ]
 
 [<Fact>]
 let ``infer Op`` () =
@@ -107,67 +129,88 @@ let assertSolve text te =
         | Result.Error msg -> failwithf "Failed to solve: %s" msg
     | Result.Error msg -> failwithf "Failed to parse: %s" msg
 
+let private success input expected = assertSolve expected input
+
+
+[<Fact>]
+let ``solve record basics`` () =
+    "{ }" |> success "{}"
+    "{a = 10; b = True}" |> success "{ a: Int, b: Bool }"
+    "{a = 10; b = True}.a" |> success "Int"
+    "{a = 10; b = True}.b" |> success "Bool"
+    "{a = 10 | { a = False; b = True}}" |> success "{ a: Int, a: Bool, b: Bool }"
+    "{a = 10 | { a = False; b = True}}.a" |> success "Int"
+    "{a = 10 | { a = False; b = True}}.b" |> success "Bool"
+
 [<Fact>]
 let ``solve \\x -> \\y -> \\z -> x + y + z`` () =
-    assertSolve "\\x -> \\y -> \\z -> x + y + z" "Int -> Int -> Int -> Int"
+    "\\x -> \\y -> \\z -> x + y + z" |> success "Int -> Int -> Int -> Int"
 
 [<Fact>]
 let ``solve \\f -> \\g -> \\x -> f (g x)`` () =
-    assertSolve "\\f -> \\g -> \\x -> f (g x)" "(V3 -> V4) -> (V2 -> V3) -> V2 -> V4"
+    "\\f -> \\g -> \\x -> f (g x)" |> success "(V3 -> V4) -> (V2 -> V3) -> V2 -> V4"
 
 [<Fact>]
 let ``solve let rec? compose = \\f -> \\g -> \\x -> f (g x) in compose`` () =
-    assertSolve "let compose = \\f -> \\g -> \\x -> f (g x) in compose" "(V6 -> V7) -> (V5 -> V6) -> V5 -> V7"
-    assertSolve "let rec compose = \\f -> \\g -> \\x -> f (g x) in compose" "(V9 -> V10) -> (V8 -> V9) -> V8 -> V10"
+    "let compose = \\f -> \\g -> \\x -> f (g x) in compose"
+    |> success "(V6 -> V7) -> (V5 -> V6) -> V5 -> V7"
+
+    "let rec compose = \\f -> \\g -> \\x -> f (g x) in compose"
+    |> success "(V9 -> V10) -> (V8 -> V9) -> V8 -> V10"
 
 [<Fact>]
 let ``let rec? f = (\\x -> x) in let rec? g = (f True) in f 3`` () =
-    assertSolve "let f = (\\x -> x) in let g = (f True) in f 3" "Int"
-    assertSolve "let rec f = (\\x -> x) in let g = (f True) in f 3" "Int"
-    assertSolve "let f = (\\x -> x) in let rec g = (f True) in f 3" "Int"
-    assertSolve "let rec f = (\\x -> x) in let rec g = (f True) in f 3" "Int"
+    "let f = (\\x -> x) in let g = (f True) in f 3" |> success "Int"
+    "let rec f = (\\x -> x) in let g = (f True) in f 3" |> success "Int"
+    "let f = (\\x -> x) in let rec g = (f True) in f 3" |> success "Int"
+    "let rec f = (\\x -> x) in let rec g = (f True) in f 3" |> success "Int"
 
 [<Fact>]
 let ``let rec? identity = \\n -> n in identity`` () =
-    assertSolve "let identity = \\n -> n in identity" "V1 -> V1"
-    assertSolve "let rec identity = \\n -> n in identity" "V4 -> V4"
+    "let identity = \\n -> n in identity" |> success "V1 -> V1"
+    "let rec identity = \\n -> n in identity" |> success "V4 -> V4"
 
 [<Fact>]
 let ``let rec? add a b = a + b; succ = add 1 in succ 10`` () =
-    assertSolve "let add a b = a + b; succ = add 1 in succ 10" "Int"
-    assertSolve "let rec add a b = a + b; succ = add 1 in succ 10" "Int"
+    "let add a b = a + b; succ = add 1 in succ 10" |> success "Int"
+    "let rec add a b = a + b; succ = add 1 in succ 10" |> success "Int"
 
 [<Fact>]
 let ``let rec? identity a = a; v = identity 10 in v`` () =
-    assertSolve "let identity a = a; v = identity 10 in v" "Int"
-    assertSolve "let rec identity a = a; v = identity 10 in v" "Int"
+    "let identity a = a; v = identity 10 in v" |> success "Int"
+    "let rec identity a = a; v = identity 10 in v" |> success "Int"
 
 [<Fact>]
 let ``let rec? identity a = a in let rec? v1 = identity 10; v2 = identity True in v?`` () =
-    assertSolve "let identity a = a in let v1 = identity 10; v2 = identity True in v1" "Int"
-    assertSolve "let identity a = a in let v1 = identity 10; v2 = identity True in v2" "Bool"
+    "let identity a = a in let v1 = identity 10; v2 = identity True in v1" |> success "Int"
+    "let identity a = a in let v1 = identity 10; v2 = identity True in v2" |> success "Bool"
 
-    assertSolve "let identity a = a in let rec v1 = identity 10; v2 = identity True in v1" "Int"
-    assertSolve "let identity a = a in let rec v1 = identity 10; v2 = identity True in v2" "Bool"
+    "let identity a = a in let rec v1 = identity 10; v2 = identity True in v1" |> success "Int"
+    "let identity a = a in let rec v1 = identity 10; v2 = identity True in v2" |> success "Bool"
 
-    assertSolve "let rec identity a = a in let v1 = identity 10; v2 = identity True in v1" "Int"
-    assertSolve "let rec identity a = a in let v1 = identity 10; v2 = identity True in v2" "Bool"
+    "let rec identity a = a in let v1 = identity 10; v2 = identity True in v1" |> success "Int"
+    "let rec identity a = a in let v1 = identity 10; v2 = identity True in v2" |> success "Bool"
 
-    assertSolve "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v1" "Int"
-    assertSolve "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v2" "Bool"
+    "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v1" |> success "Int"
+    "let rec identity a = a in let rec v1 = identity 10; v2 = identity True in v2" |> success "Bool"
 
 [<Fact>]
 let ``let rec? value a b = { a = a; b = b } in value`` () =
-    assertSolve "let value a b = { a = a; b = b } in value" "V2 -> V3 -> { a: V2, b: V3 }"
-    assertSolve "let rec value a b = { a = a; b = b } in value" "V5 -> V6 -> { a: V5, b: V6 }"
+    "let value a b = { a = a; b = b } in value" |> success "V2 -> V3 -> { a: V2, b: V3 }"
+    "let rec value a b = { a = a; b = b } in value" |> success "V5 -> V6 -> { a: V5, b: V6 }"
 
-// [<Fact>]
-// let ``let value a b = { a = a; b = b }; r = value 10 True in r`` () =
-//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r" "{ a: Int, b: Bool }"
-//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.a" "Int"
-//     assertSolve "let value a b = { a = a; b = b }; r = value 10 True in r.b" "Bool"
-//     assertSolve "let value r = r.a + r.b in value" "Bool"
+[<Fact>]
+let ``let value a b = { a = a; b = b }; r = value 10 True in r`` () =
+    "let value a b = { a = a; b = b }; r = value 10 True in r"
+    |> success "{ a: Int, b: Bool }"
+
+    "let value a b = { a = a; b = b }; r = value 10 True in r.a" |> success "Int"
+    "let value a b = { a = a; b = b }; r = value 10 True in r.b" |> success "Bool"
+    "let value r = r.a + r.b in value {a = 1; b = 2}" |> success "Int"
+    "let value r = r.a + r.b in value" |> success "{ a: Int, b: Int | V5 } -> Int"
+    "let value r = r.a in value" |> success "{ a: V3 | V4 } -> V3"
+    "let value r = r.a r.b in value" |> success "{ a: V7 -> V8, b: V7 | V6 } -> V8"
 
 [<Fact>]
 let ``enclosing scope needed for instantiate`` () =
-    assertSolve "let f x = let g y = y x in g in f" "V4 -> (V4 -> V5) -> V5"
+    "let f x = let g y = y x in g in f" |> success "V4 -> (V4 -> V5) -> V5"

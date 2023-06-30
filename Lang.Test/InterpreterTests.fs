@@ -65,7 +65,7 @@ let ``LInt`` () =
 
 [<Fact>]
 let ``LRecord`` () =
-    assertExecute "{ }" "{}: {  }"
+    assertExecute "{ }" "{}: {}"
     assertExecute "{ a = 123; b = True; c = 99 }" "{a = 123, b = true, c = 99}: { a: Int, b: Bool, c: Int }"
 
 [<Fact>]

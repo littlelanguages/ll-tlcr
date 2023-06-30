@@ -3,7 +3,8 @@ module Typing
 type Type =
     | TArr of Type * Type
     | TCon of string
-    | TRecord of Map<string, Type> * bool
+    | TRowEmpty
+    | TRowExtend of string * Type * Type
     | TTuple of Type list
     | TVar of string
 
@@ -23,7 +24,8 @@ module Type =
         function
         | TArr(t1, t2) -> Set.union (ftv t1) (ftv t2)
         | TCon _ -> Set.empty
-        | TRecord(m, _) -> Map.toList m |> List.map snd |> List.map ftv |> Set.unionMany
+        | TRowEmpty -> Set.empty
+        | TRowExtend(_, t, row) -> Set.union (ftv t) (ftv row)
         | TTuple ts -> List.map ftv ts |> Set.unionMany
         | TVar v -> Set.singleton v
 
@@ -32,7 +34,8 @@ module Type =
         function
         | TArr(t1, t2) -> TArr(apply s t1, apply s t2)
         | TCon _ as t -> t
-        | TRecord(m, o) -> (Map.map (fun k v -> apply s v) m, o) |> TRecord
+        | TRowEmpty -> TRowEmpty
+        | TRowExtend(l, t, row) -> TRowExtend(l, apply s t, apply s row)
         | TTuple ts -> TTuple(List.map (apply s) ts)
         | TVar v -> Map.tryFind v s' |> Option.defaultValue (TVar v)
 
@@ -41,11 +44,23 @@ module Type =
         | TArr(TArr _ as t1, t2) -> sprintf "(%s) -> %s" (prettyPrint t1) (prettyPrint t2)
         | TArr(t1, t2) -> sprintf "%s -> %s" (prettyPrint t1) (prettyPrint t2)
         | TCon s -> s
-        | TRecord(m, o) ->
-            Map.toSeq m
-            |> Seq.map (fun (k, v) -> sprintf "%s: %s" k (prettyPrint v))
-            |> String.concat ", "
-            |> fun t -> sprintf "{ %s%s }" t (if o then ", ... " else "")
+        | TRowEmpty -> "{}"
+        | TRowExtend _ as row ->
+            let rec f =
+                function
+                | TRowEmpty -> ""
+                | TRowExtend(l, t, row) ->
+                    let rest =
+                        match row with
+                        | TRowEmpty -> ""
+                        | TRowExtend _ -> sprintf ", %s" (f row)
+                        | _ -> sprintf " | %s" (prettyPrint row)
+
+                    sprintf "%s: %s%s" l (prettyPrint t) rest
+                | _ as t -> prettyPrint t
+
+            sprintf "{ %s }" (f row)
+
         | TTuple ts -> sprintf "(%s)" (List.map prettyPrint ts |> String.concat ", ")
         | TVar v -> v
 

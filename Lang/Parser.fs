@@ -18,10 +18,11 @@ type Expression =
     | LetRec of Declaration list * Expression
     | LBool of bool
     | LInt of int
-    | LRecord of (string * Expression) list
     | LTuple of Expression list
     | Op of Expression * Op * Expression
-    | RecProj of Expression * string
+    | RecordSelect of Expression * string
+    | RecordExtend of string * Expression * Expression
+    | RecordEmpty
     | Var of string
 
 and Declaration = string * Expression
@@ -68,7 +69,7 @@ let lowerIdentifier: Parser'<string> =
 
 let recordProjection: Parser'<Expression> =
     factor .>>. many (pchar_ws '.' >>. lowerIdentifier)
-    |>> (fun (e, fs) -> List.fold (fun e f -> RecProj(e, f)) e fs)
+    |>> (fun (e, fs) -> List.fold (fun e f -> RecordSelect(e, f)) e fs)
 
 let multiplicative: Parser'<Expression> =
     recordProjection .>>. many (multiplicativeOps .>>. recordProjection)
@@ -104,8 +105,16 @@ factorRef.Value <-
          |>> (fun (_, l, _, e) -> Lambda(l, e)))
     <|> (pchar_ws '{'
          >>. sepBy (tuple3 lowerIdentifier (pchar_ws '=') expression) (pchar_ws ';')
+         .>>. opt (pchar_ws '|' >>. expression)
          .>> pchar_ws '}'
-         |>> (fun fields -> LRecord(List.map (fun (n, _, e) -> (n, e)) fields)))
+         |>> (fun (fields, e) ->
+             match e with
+             | Some(e) -> List.foldBack (fun (n, _, e) e' -> RecordExtend(n, e, e')) fields e
+             | None ->
+                 match fields with
+                 | [] -> RecordEmpty
+                 | _ -> List.foldBack (fun (n, _, e) e' -> RecordExtend(n, e, e')) fields RecordEmpty))
+
     <|> (pstring_ws "let" >>. opt (pstring_ws "rec") .>>. declarations
          .>> pstring_ws "in"
          .>>. expression

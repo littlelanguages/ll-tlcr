@@ -17,7 +17,6 @@ let rec evaluate (e: Expression) (env: Env) : Value =
     match e with
     | LInt i -> VInt i
     | LBool b -> VBool b
-    | LRecord rs -> rs |> List.map (fun (n, e) -> n, evaluate e env) |> Map.ofList |> VRecord
     | LTuple es -> VTuple(List.map (fun e -> evaluate e env) es)
     | Var x ->
         match Map.tryFind x env.env with
@@ -70,6 +69,23 @@ let rec evaluate (e: Expression) (env: Env) : Value =
         List.iter (fun (x, e) -> env.env <- Map.add x (evaluate e env) env.env) decls
 
         evaluate e env
+    | RecordEmpty -> VRecord(Map.empty)
+    | RecordExtend(n, e1, e2) ->
+        let v1 = evaluate e1 env
+        let v2 = evaluate e2 env
+
+        match v2 with
+        | VRecord rs -> VRecord(Map.add n v1 rs)
+        | _ -> failwithf "Type error: expected a record"
+    | RecordSelect(e, n) ->
+        let v = evaluate e env
+
+        match v with
+        | VRecord rs ->
+            match Map.tryFind n rs with
+            | Some v -> v
+            | None -> failwithf "Field %s not found" n
+        | _ -> failwithf "Type error: expected a record"
 
 module Value =
     let rec prettyPrint v =
